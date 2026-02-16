@@ -1,0 +1,34 @@
+{
+    "cli": {
+        "version": ">= 10.0.0"
+    },
+    "build": {
+        "development": {
+            "developmentClient": true,
+            "distribution": "internal",
+            "env": {
+                "EXPO_PUBLIC_API_BASE_URL": "http://192.168.200.35:3001",
+                "CLOUDINARY_CLOUD_NAME": "dusgimcqs",
+                "CLOUDINARY_UPLOAD_PRESET": "images"
+            }
+        },
+        "preview": {
+            "distribution": "internal",
+            "env": {
+                "EXPO_PUBLIC_API_BASE_URL": "https://chat-app-native-server.onrender.com",
+                "CLOUDINARY_CLOUD_NAME": "dusgimcqs",
+                "CLOUDINARY_UPLOAD_PRESET": "images"
+            }
+        },
+        "production": {
+            "env": {
+                "EXPO_PUBLIC_API_BASE_URL": "https://chat-app-native-server.onrender.com",
+                "CLOUDINARY_CLOUD_NAME": "dusgimcqs",
+                "CLOUDINARY_UPLOAD_PRESET": "images"
+            }
+        }
+    },
+    "submit": {
+        "production": {}
+    }
+}
