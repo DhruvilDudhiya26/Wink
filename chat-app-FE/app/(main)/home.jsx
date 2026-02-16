@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { GearIcon, PlusIcon } from 'phosphor-react-native';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import Button from '../../components/Button';
 import ConversationItems from '../../components/ConversationItems';
 import Loading from '../../components/Loading';
@@ -9,9 +9,10 @@ import ScreenWrapper from '../../components/ScreenWrapper';
 import Typo from '../../components/Typo';
 import { colors, radius, spacingX, spacingY } from '../../constants/theme';
 import { useAuth } from '../../contexts/authContext';
-import { getConversations, newConversation } from '../../socket/socketEvents';
+import { getConversations, newConversation, updateLocation } from '../../socket/socketEvents';
 import { verticalScale } from '../../utils/styling';
 import { sendLocalNotification } from '../../services/notificationService';
+import * as Location from 'expo-location';
 
 const Home = () => {
     const { user, logout } = useAuth();
@@ -23,6 +24,22 @@ const Home = () => {
     useEffect(() => {
         getConversations(processConversations);
         newConversation(newConversationHandler)
+
+        const getLocation = async () => {
+            let { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission to access location was denied');
+                return;
+            }
+
+            let location = await Location.getCurrentPositionAsync({});
+            console.log("Location:", location.coords);
+            updateLocation({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude
+            });
+        }
+        getLocation();
 
         getConversations(null)
         return () => {
@@ -81,8 +98,8 @@ const Home = () => {
             <View style={styles.container}>
                 <View style={styles.header}>
                     <View style={{ flex: 1 }}>
-                        <Typo color={colors.neutral400} size={19} textProps={{ numberOfLines: 1 }}>Welcome back,</Typo>
-                        <Typo fontWeight='700' color={colors.text} size={22}>{user?.name}</Typo>
+                        <Typo color={"white"} size={19} textProps={{ numberOfLines: 1 }}>Welcome back,</Typo>
+                        <Typo fontWeight='700' color={"white"} size={22}>{user?.name}</Typo>
                     </View>
                     <TouchableOpacity style={styles.settingIcon} onPress={() => router.push("/(main)/profileModel")}>
                         <GearIcon color={colors.text} weight='fill' size={verticalScale(22)} />

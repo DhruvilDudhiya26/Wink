@@ -84,6 +84,6 @@ export function initializeNotificationListeners(router) {
     });
 
     return () => {
-        Notifications.removeNotificationSubscription(responseListener);
+        responseListener.remove();
     };
 }

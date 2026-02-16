@@ -158,6 +158,80 @@ export const stopTyping = (payload, off) => {
     } else if (typeof payload == "function") {
         socket.on("stopTyping", payload);
     } else {
-        socket.emit("stopTyping", payload)
+    }
+};
+
+export const userOnline = (payload, off) => {
+    const socket = getSocket();
+    if (!socket) {
+        console.log("socket is not connected ");
+        return;
+    }
+    if (off) {
+        socket.off("userOnline", payload);
+    } else if (typeof payload == "function") {
+        socket.on("userOnline", payload);
+    } else {
+        socket.emit("userOnline", payload)
+    }
+};
+
+export const userOffline = (payload, off) => {
+    const socket = getSocket();
+    if (!socket) {
+        console.log("socket is not connected ");
+        return;
+    }
+    if (off) {
+        socket.off("userOffline", payload);
+    } else if (typeof payload == "function") {
+        socket.on("userOffline", payload);
+    } else {
+        socket.emit("userOffline", payload)
+    }
+};
+
+export const updateLocation = (payload, off) => {
+    const socket = getSocket();
+    if (!socket) {
+        console.log("socket is not connected ");
+        return;
+    }
+    if (off) {
+        socket.off("updateLocation", payload);
+    } else if (typeof payload == "function") {
+        socket.on("updateLocation", payload);
+    } else {
+        socket.emit("updateLocation", payload)
+    }
+};
+
+export const markMessagesAsRead = (payload, off) => {
+    const socket = getSocket();
+    if (!socket) {
+        console.log("socket is not connected ");
+        return;
+    }
+    if (off) {
+        socket.off("markMessagesAsRead", payload);
+    } else if (typeof payload == "function") {
+        socket.on("markMessagesAsRead", payload);
+    } else {
+        socket.emit("markMessagesAsRead", payload)
+    }
+};
+
+export const messagesRead = (payload, off) => {
+    const socket = getSocket();
+    if (!socket) {
+        console.log("socket is not connected ");
+        return;
+    }
+    if (off) {
+        socket.off("messagesRead", payload);
+    } else if (typeof payload == "function") {
+        socket.on("messagesRead", payload);
+    } else {
+        socket.emit("messagesRead", payload)
     }
 };

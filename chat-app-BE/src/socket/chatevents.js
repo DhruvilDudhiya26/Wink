@@ -28,6 +28,11 @@ export function registerChatEvents(io, socket) {
                 select: "name avatar email"
             }).lean();
 
+            // Join the user to all conversation rooms
+            conversations.forEach(conversation => {
+                socket.join(conversation._id.toString());
+            });
+
             socket.emit("getConversations", {
                 success: true,
                 data: conversations,
@@ -128,6 +133,7 @@ export function registerChatEvents(io, socket) {
                     attachment: data.attachment,
                     createdAt: new Date().toISOString(),
                     conversationId: data.conversationId,
+                    status: "sent"
                 }
             });
 
@@ -301,10 +307,13 @@ export function registerChatEvents(io, socket) {
     socket.on("getConversationById", async (data) => {
         try {
             const { conversationId } = data;
+            // Join the conversation room to ensure we receive real-time updates (like typing, read receipts)
+            socket.join(conversationId);
+
             const conversation = await Conversation.findById(conversationId)
                 .populate({
                     path: "participants",
-                    select: "name avatar email pushToken"
+                    select: "name avatar email pushToken isOnline lastSeen"
                 })
                 .lean();
 
@@ -330,14 +339,43 @@ export function registerChatEvents(io, socket) {
         }
     })
 
-
-
     socket.on("typing", (data) => {
         socket.to(data.conversationId).emit("typing", data);
     });
 
     socket.on("stopTyping", (data) => {
         socket.to(data.conversationId).emit("stopTyping", data);
+    });
+
+    socket.on("markMessagesAsRead", async (data) => {
+        try {
+            console.log("markMessagesAsRead", data)
+            const { conversationId } = data;
+            const userId = socket.data.userId;
+
+            // Update all messages in this conversation where recipient is current user and status is NOT read
+            // Wait, we don't have recipientId on Message. We have senderId.
+            // So we update messages where senderId is NOT current user.
+
+            await Message.updateMany(
+                {
+                    conversationId: conversationId,
+                    senderId: { $ne: userId },
+                    status: { $ne: "read" }
+                },
+                { status: "read" }
+            );
+
+            // Emit to the sender(s) that their messages were read
+            // Simplest way: emit to the room. The sender will receive it and update their UI.
+            io.to(conversationId).emit("messagesRead", {
+                conversationId,
+                readBy: userId
+            });
+
+        } catch (error) {
+            console.log("Error marking messages as read:", error);
+        }
     });
 
 }

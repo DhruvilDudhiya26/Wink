@@ -15,7 +15,7 @@ const welcome = () => {
             <View style={styles.container}>
                 <View style={{ alignItems: "center" }}>
                     <Typo color={colors.white} size={43} fontWeight={"900"}>
-                        Bunty
+                        Wink
                     </Typo>
                 </View>
                 <Animated.Image

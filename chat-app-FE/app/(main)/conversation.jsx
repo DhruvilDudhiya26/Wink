@@ -15,7 +15,7 @@ import Typo from '../../components/Typo'
 import { colors, radius, spacingX, spacingY } from '../../constants/theme'
 import { useAuth } from '../../contexts/authContext'
 import { uploadToCloudinary } from "../../services/imageService"
-import { getMessages, newMessage, getConversationById, messageSuggestions, typing, stopTyping } from "../../socket/socketEvents"
+import { getConversationById, getMessages, newMessage, stopTyping, typing, markMessagesAsRead, messagesRead, messageSuggestions, userOnline, userOffline } from '../../socket/socketEvents';
 import { scale, verticalScale } from '../../utils/styling'
 const Conversation = () => {
     const [message, setMessage] = useState("")
@@ -26,33 +26,53 @@ const Conversation = () => {
     const [messages, setMessages] = useState([]);
     const [fetchedConversation, setFetchedConversation] = useState(null);
     const [suggestions, setSuggestions] = useState([]);
+    const [onlineUsers, setOnlineUsers] = useState([]);
     const [typingUsers, setTypingUsers] = useState([]);
     const typingTimeoutRef = React.useRef(null);
 
     useEffect(() => {
-        newMessage(newMessageHandler);
+        if (conversationId) {
+            getConversationById({ conversationId });
+            getMessages({ conversationId });
+            // Mark messages as read when entering the conversation
+            markMessagesAsRead({ conversationId: conversationId });
+        }
+
+        getConversationById(getConversationHandler);
         getMessages(getMessagesHandler);
+        newMessage(newMessageHandler);
         messageSuggestions(suggestionsHandler);
         typing(typingHandler);
         stopTyping(stopTypingHandler);
-
-        getMessages({ conversationId })
-        if (!name || stringifiedParticipants == undefined) {
-            getConversationById({ conversationId });
-            getConversationById(getConversationHandler);
-        }
+        userOnline(userOnlineHandler);
+        userOffline(userOfflineHandler);
+        messagesRead(messagesReadHandler);
 
         return () => {
+            getConversationById(getConversationHandler, true);
+            getMessages(getMessagesHandler, true);
             newMessage(newMessageHandler, true);
-            getMessages(getMessagesHandler, true)
-            if (!name || stringifiedParticipants == undefined) {
-                getConversationById(getConversationHandler, true);
-            }
             messageSuggestions(suggestionsHandler, true);
             typing(typingHandler, true);
             stopTyping(stopTypingHandler, true);
+            userOnline(userOnlineHandler, true);
+            userOffline(userOfflineHandler, true);
+            messagesRead(messagesReadHandler, true);
         }
-    }, [])
+    }, [conversationId])
+
+    const userOnlineHandler = (res) => {
+        setOnlineUsers(prev => {
+            if (!prev.includes(res.userId)) {
+                return [...prev, res.userId];
+            }
+            return prev;
+        });
+    }
+
+    const userOfflineHandler = (res) => {
+        setOnlineUsers(prev => prev.filter(id => id !== res.userId));
+    }
 
     const typingHandler = (res) => {
         if (res.conversationId == conversationId && res.user.id !== currentUser?.id) {
@@ -108,13 +128,36 @@ const Conversation = () => {
         if (res.success) {
             if (res.data.conversationId == conversationId) {
                 setMessages((prev) => [res.data, ...prev])
+                // If I am the recipient (i.e. sender is not me) and I am on this screen, mark as read immediately
+                if (res.data.sender.id !== currentUser.id) {
+                    markMessagesAsRead({ conversationId: conversationId });
+                }
             }
+        }
+    }
+
+    const messagesReadHandler = (res) => {
+        console.log("messagesRead received:", res);
+        // res = { conversationId, readBy }
+        if (res.conversationId === conversationId) {
+            setMessages(prev => prev.map(msg => {
+                // Update status of my messages to 'read' if they are sent by me and not yet read
+                if (msg.sender.id === currentUser.id && msg.status !== 'read') {
+                    return { ...msg, status: 'read' };
+                }
+                return msg;
+            }));
         }
     }
 
     const getConversationHandler = (res) => {
         if (res.success) {
             setFetchedConversation(res.data);
+            const onlineParticipants = res.data.participants.filter(p => p.isOnline).map(p => p._id);
+            setOnlineUsers(prev => {
+                const newOnlineUsers = [...prev, ...onlineParticipants];
+                return [...new Set(newOnlineUsers)];
+            });
         }
     }
 
@@ -141,6 +184,39 @@ const Conversation = () => {
         conversationAvatar = otherParticipants.avatar
     }
     let conversationName = isDirect ? otherParticipants?.name : (name || fetchedConversation?.name);
+
+    // Check if other participant is online (for direct chats)
+    let isOtherUserOnline = false;
+    let lastSeenTime = null;
+
+    if (isDirect && otherParticipants) {
+        // Check onlineUsers state first
+        isOtherUserOnline = onlineUsers.includes(otherParticipants._id);
+
+        // If not online, check lastSeen from fetchedConversation if available
+        if (!isOtherUserOnline && fetchedConversation) {
+            const participant = fetchedConversation.participants.find(p => p._id === otherParticipants._id);
+            if (participant && participant.lastSeen) {
+                lastSeenTime = participant.lastSeen;
+            }
+        }
+    }
+
+    const formatLastSeen = (dateString) => {
+        if (!dateString) return "";
+        const date = new Date(dateString);
+        const now = new Date();
+        const diff = now - date;
+        const minutes = Math.floor(diff / 60000);
+        const hours = Math.floor(diff / 3600000);
+        const days = Math.floor(diff / 86400000);
+
+        if (minutes < 1) return "Just now";
+        if (minutes < 60) return `${minutes}m ago`;
+        if (hours < 24) return `${hours}h ago`;
+        if (days === 1) return "Yesterday";
+        return date.toLocaleDateString();
+    }
     const onPickFile = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ["images"],
@@ -191,11 +267,26 @@ const Conversation = () => {
         <ScreenWrapper showPattern={true} bgOpacity={0.5} >
             <KeyboardAvoidingView behavior={Platform.OS == "ios" ? "padding" : "height"} style={styles.container}>
                 <Header style={styles.header} leftIcon={<View style={styles.headerLeft}>
-                    <BackButton color={colors.text} />
-                    <Avatar size={40} uri={conversationAvatar} isGroup={type == "group"} />
-                    <Typo color={colors.text} fontWeight={"600"} size={18} textProps={{ numberOfLines: 1 }}>
-                        {conversationName}
-                    </Typo>
+                    <BackButton color={"white"} />
+                    <Avatar size={40} uri={conversationAvatar} isGroup={type == "group"} isOnline={isOtherUserOnline} />
+                    <View>
+                        <Typo color={"white"} fontWeight={"600"} size={18} textProps={{ numberOfLines: 1 }}>
+                            {conversationName}
+                        </Typo>
+                        {isDirect && (
+                            isOtherUserOnline ? (
+                                <Typo color={colors.green} size={12}>
+                                    Online
+                                </Typo>
+                            ) : (
+                                lastSeenTime && (
+                                    <Typo color={colors.neutral300} size={12}>
+                                        Last seen {formatLastSeen(lastSeenTime)}
+                                    </Typo>
+                                )
+                            )
+                        )}
+                    </View>
                 </View>}
                     rightIcon={<TouchableOpacity style={{ marginBottom: verticalScale(7) }}>
                         <DotsThreeOutlineVerticalIcon weight='fill' color={colors.text} />
@@ -319,8 +410,8 @@ const styles = StyleSheet.create({
     },
     inputRightIcon: {
         position: "absolute",
-        right: scale(10),
-        top: verticalScale(15),
+        right: scale(25),
+        bottom: verticalScale(10),
         paddingLeft: spacingX._12,
         borderLeftWidth: 1.5,
         borderLeftColor: colors.neutral300

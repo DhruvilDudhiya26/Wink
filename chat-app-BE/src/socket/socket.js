@@ -4,6 +4,10 @@ import { Server as SocketIoServer } from "socket.io";
 import { registerUserEvents } from "./userEvent.js";
 import { registerChatEvents } from "./chatevents.js";
 import Conversation from "../models/Conversation.js";
+import User from "../models/User.js";
+import { Expo } from 'expo-server-sdk';
+
+const expo = new Expo();
 
 dotenv.config();
 
@@ -39,7 +43,13 @@ export function initializeSocket(server) {
     })
 
     io.on("connection", async (socket) => {
-        console.log("socket connected:", socket.id, "userId:", socket.data?.userId);
+        const userId = socket.data?.userId;
+        console.log("socket connected:", socket.id, "userId:", userId);
+
+        if (userId) {
+            await User.findByIdAndUpdate(userId, { isOnline: true });
+            socket.broadcast.emit("userOnline", { userId });
+        }
 
 
         // register events
@@ -60,9 +70,71 @@ export function initializeSocket(server) {
 
         }
 
-        socket.on("disconnect", () => {
-            console.log("socket disconnected:", socket.id, "userId:", socket.data?.userId);
+        socket.on("disconnect", async () => {
+            const userId = socket.data?.userId;
+            console.log("socket disconnected:", socket.id, "userId:", userId);
+            if (userId) {
+                await User.findByIdAndUpdate(userId, { isOnline: false, lastSeen: new Date() });
+                socket.broadcast.emit("userOffline", { userId, lastSeen: new Date() });
+            }
         })
+
+        socket.on("updateLocation", async (data) => {
+            const userId = socket.data?.userId;
+            if (!userId || !data.latitude || !data.longitude) return;
+
+            try {
+                // Update user location
+                await User.findByIdAndUpdate(userId, {
+                    location: {
+                        type: "Point",
+                        coordinates: [data.longitude, data.latitude]
+                    }
+                });
+
+                // Check for nearby users (e.g., within 500 meters)
+                const nearbyUsers = await User.find({
+                    location: {
+                        $near: {
+                            $geometry: {
+                                type: "Point",
+                                coordinates: [data.longitude, data.latitude]
+                            },
+                            $maxDistance: 500 // 500 meters
+                        }
+                    },
+                    _id: { $ne: userId } // Exclude self
+                }).select("name pushToken");
+
+                if (nearbyUsers.length > 0) {
+                    console.log(`Found ${nearbyUsers.length} users nearby ${socket.data.user.name}`);
+
+                    // Notify nearby users
+                    // Optimization: In real app, check cooldown to avoid spam
+                    let messages = [];
+                    for (const user of nearbyUsers) {
+                        if (user.pushToken && Expo.isExpoPushToken(user.pushToken)) {
+                            messages.push({
+                                to: user.pushToken,
+                                sound: 'default',
+                                title: "Nearby Friend!",
+                                body: `${socket.data.user.name} is near you!`,
+                                data: { type: 'proximity', userId: userId },
+                            });
+                        }
+                    }
+                    if (messages.length > 0) {
+                        let chunks = expo.chunkPushNotifications(messages);
+                        for (let chunk of chunks) {
+                            await expo.sendPushNotificationsAsync(chunk);
+                        }
+                    }
+                }
+
+            } catch (error) {
+                console.error("Error updating location:", error);
+            }
+        });
     })
 
     return io

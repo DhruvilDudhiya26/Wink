@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import moment from 'moment';
+import { Check, Checks } from 'phosphor-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { colors, radius, spacingX, spacingY } from '../constants/theme';
@@ -31,7 +32,18 @@ const MessageItem = ({ item, isDirect }) => {
                     )
                 }
                 {item.content && <Typo size={15}>{item.content}</Typo>}
-                <Typo style={{ alignSelf: "flex-end" }} size={11} fontWeight={"500"} color={colors.neutral600}>{formattedDate}</Typo>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacingX._5 }}>
+                    <Typo size={11} fontWeight={"500"} color={colors.neutral600}>{formattedDate}</Typo>
+                    {isMe && (
+                        item.status === 'read' ? (
+                            <Checks size={14} color={colors.primary} weight="bold" />
+                        ) : item.status === 'delivered' ? (
+                            <Checks size={14} color={colors.neutral400} weight="bold" />
+                        ) : (
+                            <Check size={14} color={colors.neutral400} weight="bold" />
+                        )
+                    )}
+                </View>
             </View>
 
         </View>
